@@ -1,11 +1,12 @@
 const API=window.OAVS_API_URL||"http://localhost:5000/api";
-let state={topics:[],logs:[],revisions:[],pyqs:[],mocks:[],tasks:[]},restoreData=null;
+let state={topics:[],logs:[],revisions:[],pyqs:[],mocks:[],tasks:[],schedules:[]},restoreData=null;
 const $=id=>document.getElementById(id),today=()=>new Date().toISOString().slice(0,10);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmtDate=d=>d?new Date(d+"T00:00:00").toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):"";
+const makeId=()=>[...Array(24)].map(()=>Math.floor(Math.random()*16).toString(16)).join("");
 function toast(s){let e=$("toast");e.textContent=s;e.classList.add("show");clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>e.classList.remove("show"),2500)}
 async function api(path,opt={}){let r=await fetch(API+path,{...opt,headers:{"Content-Type":"application/json",...(opt.headers||{})}});let b=await r.json().catch(()=>({}));if(!r.ok)throw Error(b.message||"API request failed");return b}
-async function load(){let x=await api("/data");state={topics:[],logs:[],revisions:[],pyqs:[],mocks:[],tasks:[],...x.data};$("connectionText").textContent="Connected";$("cloudStatus").textContent="Connected to MongoDB API";$("cloudDetail").textContent="Your records were loaded from the configured database.";document.querySelectorAll(".pulse").forEach(x=>x.classList.add("online"));render()}
+async function load(){let x=await api("/data");state={topics:[],logs:[],revisions:[],pyqs:[],mocks:[],tasks:[],schedules:[],...x.data};ensureDailySchedule(today());$("connectionText").textContent="Connected";$("cloudStatus").textContent="Connected to MongoDB API";$("cloudDetail").textContent="Your records were loaded from the configured database.";document.querySelectorAll(".pulse").forEach(x=>x.classList.add("online"));render()}
 async function saveAll(silent=false){let x=await api("/data",{method:"PUT",body:JSON.stringify(state)});state={...state,...x.data};if(!silent){render();toast("Saved to MongoDB Atlas")}else{renderDashboard();renderAnalytics()}}
 async function add(col,obj){let x=await api("/data/"+col,{method:"POST",body:JSON.stringify(obj)});state={...state,...x.data};render();toast("Saved to MongoDB Atlas")}
 async function del(col,id){await api(`/data/${col}/${id}`,{method:"DELETE"});await load();toast("Record deleted")}
@@ -18,10 +19,12 @@ $("dashSections").innerHTML=Object.entries(groupTopics()).map(([s,a])=>{let n=a.
 let todays=state.tasks.filter(t=>t.date===today()).sort((a,b)=>Number(a.completed)-Number(b.completed));$("todayTasks").innerHTML=todays.slice(0,5).map(t=>`<div class="task-item"><input class="check" type="checkbox" data-taskcheck="${t._id}" ${t.completed?"checked":""}><div class="task-copy"><b>${esc(t.title)}</b><small>${esc(t.subject)} · ${t.duration} min</small></div><span class="pill">${esc(t.priority)}</span></div>`).join("")||'<div class="empty">No tasks planned for today. Add one from the planner.</div>';
 $("dashRevisions").innerHTML=state.revisions.slice().sort((a,b)=>a.date.localeCompare(b.date)).slice(0,4).map(r=>`<div class="task-item"><div class="task-copy"><b>${esc(r.topic)}</b><small>${fmtDate(r.date)} · ${esc(r.round)}</small></div></div>`).join("")||'<div class="empty">No revision reminders yet.</div>';
 $("recentLogs").innerHTML=state.logs.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4).map(l=>`<div class="task-item"><div class="task-copy"><b>${esc(l.topic||l.subject)}</b><small>${fmtDate(l.date)} · ${esc(l.subject)} · ${l.minutes} min</small></div></div>`).join("")||'<div class="empty">Your recent study sessions will appear here.</div>';
-document.querySelectorAll("[data-taskcheck]").forEach(x=>x.onchange=()=>toggleTask(x.dataset.taskcheck,x.checked))}
+document.querySelectorAll("[data-taskcheck]").forEach(x=>x.onchange=()=>toggleTask(x.dataset.taskcheck,x.checked));
+renderDailySchedule();
+}
 function renderPlanner(){let date=$("planDate").value||today(),filter=$("planFilter").value;let arr=state.tasks.filter(t=>(!date||t.date===date)&&(filter==="all"||(filter==="done"&&t.completed)||(filter==="pending"&&!t.completed)));let all=state.tasks.filter(t=>!date||t.date===date),doneCount=all.filter(t=>t.completed).length;$("planTotal").textContent=all.length;$("planMinutes").textContent=all.reduce((a,t)=>a+Number(t.duration||0),0)+"m";$("planDone").textContent=all.length?Math.round(doneCount/all.length*100)+"%":"0%";
-$("taskRows").innerHTML=arr.map(t=>`<div class="task-item"><input class="check" type="checkbox" data-taskcheck="${t._id}" ${t.completed?"checked":""}><div class="task-copy"><b style="${t.completed?"text-decoration:line-through;opacity:.6":""}">${esc(t.title)}</b><small>${fmtDate(t.date)} · ${esc(t.subject)} · ${t.duration} min · ${esc(t.priority)} priority</small></div><div class="task-actions"><button class="tiny-btn" data-edit="${t._id}">Edit</button><button class="tiny-btn" data-delete="${t._id}">×</button></div></div>`).join("")||'<div class="empty">No tasks for this filter and date.</div>';
-document.querySelectorAll("[data-taskcheck]").forEach(x=>x.onchange=()=>toggleTask(x.dataset.taskcheck,x.checked));document.querySelectorAll("[data-delete]").forEach(x=>x.onclick=()=>del("tasks",x.dataset.delete));document.querySelectorAll("[data-edit]").forEach(x=>x.onclick=()=>editTask(x.dataset.edit))}
+$("taskRows").innerHTML=arr.map(t=>`<div class="task-item"><input class="check" type="checkbox" data-taskcheck="${t._id}" ${t.completed?"checked":""}><div class="task-copy"><b style="${t.completed?"text-decoration:line-through;opacity:.6":""}">${esc(t.title)}</b><small>${fmtDate(t.date)} · ${esc(t.subject)} · ${t.duration} min · ${esc(t.priority)} priority</small></div><div class="task-actions"><button class="tiny-btn" data-edit="${t._id}">Edit</button><button class="tiny-btn" data-taskdel="${t._id}">×</button></div></div>`).join("")||'<div class="empty">No tasks for this filter and date.</div>';
+document.querySelectorAll("[data-taskcheck]").forEach(x=>x.onchange=()=>toggleTask(x.dataset.taskcheck,x.checked));document.querySelectorAll("[data-taskdel]").forEach(x=>x.onclick=()=>del("tasks",x.dataset.taskdel));document.querySelectorAll("[data-edit]").forEach(x=>x.onclick=()=>editTask(x.dataset.edit))}
 async function toggleTask(id,v){let t=state.tasks.find(x=>x._id===id);if(t){t.completed=v;try{await saveAll()}catch(e){toast(e.message)}}}
 function editTask(id){let t=state.tasks.find(x=>x._id===id);if(!t)return;let f=$("taskForm");Object.keys(t).forEach(k=>{if(f.elements[k])f.elements[k].value=t[k]});$("plannerFormTitle").textContent="Edit study task";nav("planner");window.scrollTo({top:0,behavior:"smooth"})}
 const collapsedSections = new Set();
@@ -124,7 +127,259 @@ function renderSyllabus() {
   });
 }
 
-function renderRevisions(){$("revisionRows").innerHTML=state.revisions.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(r=>`<div class="task-item"><div class="task-copy"><b>${esc(r.topic)}</b><small>${fmtDate(r.date)} · ${esc(r.round)} ${r.note?"· "+esc(r.note):""}</small></div><button class="tiny-btn" data-delete="${r._id}">Done / remove</button></div>`).join("")||'<div class="empty">No revision reminders saved.</div>';document.querySelectorAll("[data-delete]").forEach(x=>x.onclick=()=>del("revisions",x.dataset.delete))}
+const DEFAULT_SCHEDULE_TEMPLATE = [
+  { shift: "Morning", title: "Computer Science", duration: 90, completed: false },
+  { shift: "Morning", title: "Reasoning", duration: 30, completed: false },
+  { shift: "Morning", title: "English", duration: 10, completed: false },
+  { shift: "Morning", title: "Odia", duration: 10, completed: false },
+  { shift: "Morning", title: "Quick Revision", duration: 10, completed: false },
+  { shift: "Night", title: "Computer MCQs / Previous Year Questions", duration: 30, completed: false },
+  { shift: "Night", title: "Current Affairs", duration: 20, completed: false },
+  { shift: "Night", title: "Morning Topic Revision", duration: 20, completed: false },
+  { shift: "Night", title: "Weak Topics / Extra Practice", duration: 20, completed: false }
+];
+
+function getSelectedSchedDate() {
+  let el = $("schedDate");
+  return (el && el.value) ? el.value : today();
+}
+
+function ensureDailySchedule(date) {
+  if (!state.schedules) state.schedules = [];
+  let existing = state.schedules.filter(s => s.date === date);
+  if (existing.length === 0) {
+    let newItems = DEFAULT_SCHEDULE_TEMPLATE.map(t => ({
+      _id: makeId(),
+      date: date,
+      shift: t.shift,
+      title: t.title,
+      duration: t.duration,
+      completed: false
+    }));
+    state.schedules.push(...newItems);
+    return true;
+  }
+  return false;
+}
+
+function renderDailySchedule() {
+  if (!$("schedDate")) return;
+  let curDate = getSelectedSchedDate();
+  if (!$("schedDate").value) $("schedDate").value = curDate;
+
+  ensureDailySchedule(curDate);
+
+  let dayItems = (state.schedules || []).filter(s => s.date === curDate);
+  let morningItems = dayItems.filter(s => s.shift === "Morning");
+  let nightItems = dayItems.filter(s => s.shift === "Night");
+
+  let mTotal = morningItems.reduce((acc, x) => acc + Number(x.duration || 0), 0);
+  let mDone = morningItems.filter(x => x.completed).reduce((acc, x) => acc + Number(x.duration || 0), 0);
+  let mRem = Math.max(0, mTotal - mDone);
+  let mPct = mTotal ? Math.round(mDone / mTotal * 100) : 0;
+
+  let nTotal = nightItems.reduce((acc, x) => acc + Number(x.duration || 0), 0);
+  let nDone = nightItems.filter(x => x.completed).reduce((acc, x) => acc + Number(x.duration || 0), 0);
+  let nRem = Math.max(0, nTotal - nDone);
+  let nPct = nTotal ? Math.round(nDone / nTotal * 100) : 0;
+
+  let dayTotal = mTotal + nTotal;
+  let dayDone = mDone + nDone;
+  let dayRem = Math.max(0, dayTotal - dayDone);
+  let dayPct = dayTotal ? Math.round(dayDone / dayTotal * 100) : 0;
+
+  if ($("schedTotalTime")) $("schedTotalTime").textContent = `${dayTotal}m (${(dayTotal / 60).toFixed(1)}h)`;
+  if ($("schedDoneTime")) $("schedDoneTime").textContent = `${dayDone}m (${(dayDone / 60).toFixed(1)}h)`;
+  if ($("schedRemainingTime")) $("schedRemainingTime").textContent = `${dayRem}m (${(dayRem / 60).toFixed(1)}h)`;
+  if ($("schedCompletionPct")) $("schedCompletionPct").textContent = `${dayPct}%`;
+  if ($("schedProgressBar")) $("schedProgressBar").style.width = `${dayPct}%`;
+
+  if ($("morningPct")) $("morningPct").textContent = `${mPct}%`;
+  if ($("morningSummary")) $("morningSummary").textContent = `${mDone} / ${mTotal}m done · ${mRem}m left`;
+  if ($("morningBar")) $("morningBar").style.width = `${mPct}%`;
+
+  if ($("nightPct")) $("nightPct").textContent = `${nPct}%`;
+  if ($("nightSummary")) $("nightSummary").textContent = `${nDone} / ${nTotal}m done · ${nRem}m left`;
+  if ($("nightBar")) $("nightBar").style.width = `${nPct}%`;
+
+  function renderList(items) {
+    if (!items.length) return '<div class="empty" style="padding:16px;">No tasks in this schedule block. Add one below.</div>';
+    return items.map(item => `
+      <div class="sched-item ${item.completed ? 'completed' : ''}" data-sched-id="${item._id}">
+        <input type="checkbox" class="sched-check" data-sched-check="${item._id}" ${item.completed ? 'checked' : ''}>
+        <div class="sched-info">
+          <span class="sched-title">${esc(item.title)}</span>
+          <span class="sched-duration-chip">${item.duration}m</span>
+        </div>
+        <div class="sched-actions">
+          <button type="button" class="sched-icon-btn" data-sched-edit="${item._id}" title="Edit task">✎</button>
+          <button type="button" class="sched-icon-btn btn-del" data-sched-del="${item._id}" title="Delete task">×</button>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  if ($("morningList")) $("morningList").innerHTML = renderList(morningItems);
+  if ($("nightList")) $("nightList").innerHTML = renderList(nightItems);
+
+  document.querySelectorAll("[data-sched-check]").forEach(chk => {
+    chk.onchange = async () => {
+      let id = chk.dataset.schedCheck;
+      let item = (state.schedules || []).find(s => String(s._id) === String(id));
+      if (item) {
+        item.completed = chk.checked;
+        renderDailySchedule();
+        try {
+          await saveAll(true);
+        } catch (err) {
+          toast(err.message);
+        }
+      }
+    };
+  });
+
+  document.querySelectorAll("[data-sched-edit]").forEach(btn => {
+    btn.onclick = () => {
+      let id = btn.dataset.schedEdit;
+      let item = (state.schedules || []).find(s => String(s._id) === String(id));
+      if (!item) return;
+      let f = $("schedTaskForm");
+      f.elements.id.value = item._id;
+      f.elements.shift.value = item.shift;
+      f.elements.title.value = item.title;
+      f.elements.duration.value = item.duration;
+      $("schedDialogTitle").textContent = "Edit schedule task";
+      $("schedDialog").showModal();
+    };
+  });
+
+  document.querySelectorAll("[data-sched-del]").forEach(btn => {
+    btn.onclick = async () => {
+      let id = btn.dataset.schedDel;
+      state.schedules = (state.schedules || []).filter(s => String(s._id) !== String(id));
+      renderDailySchedule();
+      try {
+        await saveAll(true);
+        toast("Schedule task removed");
+      } catch (err) {
+        toast(err.message);
+      }
+    };
+  });
+}
+
+function initScheduleControls() {
+  if ($("schedDate")) {
+    $("schedDate").value = today();
+    $("schedDate").onchange = async () => {
+      let created = ensureDailySchedule($("schedDate").value);
+      renderDailySchedule();
+      if (created) {
+        try { await saveAll(true); } catch (_) {}
+      }
+    };
+  }
+
+  if ($("schedTodayBtn")) {
+    $("schedTodayBtn").onclick = async () => {
+      $("schedDate").value = today();
+      let created = ensureDailySchedule(today());
+      renderDailySchedule();
+      if (created) {
+        try { await saveAll(true); } catch (_) {}
+      }
+    };
+  }
+
+  if ($("schedResetDayBtn")) {
+    $("schedResetDayBtn").onclick = async () => {
+      let curDate = getSelectedSchedDate();
+      if (!confirm(`Reset schedule for ${fmtDate(curDate)} back to the default 2.5h Morning & 1.5h Night routine?\n(Historical records for all other dates remain saved.)`)) return;
+      state.schedules = (state.schedules || []).filter(s => s.date !== curDate);
+      ensureDailySchedule(curDate);
+      renderDailySchedule();
+      try {
+        await saveAll(true);
+        toast("Daily schedule reset to default template");
+      } catch (err) {
+        toast(err.message);
+      }
+    };
+  }
+
+  if ($("schedAddSlotBtn")) {
+    $("schedAddSlotBtn").onclick = () => {
+      let f = $("schedTaskForm");
+      f.reset();
+      f.elements.id.value = "";
+      f.elements.shift.value = "Morning";
+      f.elements.duration.value = 30;
+      $("schedDialogTitle").textContent = "Add schedule task";
+      $("schedDialog").showModal();
+    };
+  }
+
+  document.querySelectorAll("[data-add-shift]").forEach(btn => {
+    btn.onclick = () => {
+      let shift = btn.dataset.addShift;
+      let f = $("schedTaskForm");
+      f.reset();
+      f.elements.id.value = "";
+      f.elements.shift.value = shift;
+      f.elements.duration.value = shift === "Morning" ? 30 : 20;
+      $("schedDialogTitle").textContent = `Add ${shift.toLowerCase()} task`;
+      $("schedDialog").showModal();
+    };
+  });
+
+  if ($("closeSchedDialog")) {
+    $("closeSchedDialog").onclick = () => $("schedDialog").close();
+  }
+
+  if ($("schedTaskForm")) {
+    $("schedTaskForm").onsubmit = async e => {
+      e.preventDefault();
+      let f = e.target;
+      let curDate = getSelectedSchedDate();
+      let id = f.elements.id.value;
+      let shift = f.elements.shift.value;
+      let title = f.elements.title.value.trim();
+      let duration = Math.max(1, Math.min(1440, Number(f.elements.duration.value) || 30));
+
+      if (!title) return toast("Please enter a task title");
+
+      if (id) {
+        let item = (state.schedules || []).find(s => String(s._id) === String(id));
+        if (item) {
+          item.shift = shift;
+          item.title = title;
+          item.duration = duration;
+        }
+      } else {
+        if (!state.schedules) state.schedules = [];
+        state.schedules.push({
+          _id: makeId(),
+          date: curDate,
+          shift,
+          title,
+          duration,
+          completed: false
+        });
+      }
+
+      $("schedDialog").close();
+      renderDailySchedule();
+      try {
+        await saveAll(true);
+        toast("Schedule updated");
+      } catch (err) {
+        toast(err.message);
+      }
+    };
+  }
+}
+
+function renderRevisions(){$("revisionRows").innerHTML=state.revisions.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(r=>`<div class="task-item"><div class="task-copy"><b>${esc(r.topic)}</b><small>${fmtDate(r.date)} · ${esc(r.round)} ${r.note?"· "+esc(r.note):""}</small></div><button class="tiny-btn" data-revdel="${r._id}">Done / remove</button></div>`).join("")||'<div class="empty">No revision reminders saved.</div>';document.querySelectorAll("[data-revdel]").forEach(x=>x.onclick=()=>del("revisions",x.dataset.revdel))}
 function renderPyqs(){let map={};state.pyqs.forEach(p=>map[p.topic]=(map[p.topic]||0)+Number(p.count));let max=Math.max(1,...Object.values(map));$("frequency").innerHTML=Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([t,n])=>`<div class="frequency-row"><b>${esc(t)}</b><div class="bar"><i style="width:${n/max*100}%"></i></div><span>${n}</span></div>`).join("")||'<div class="empty">Add PYQ records to see topic frequency.</div>';$("pyqRows").innerHTML=state.pyqs.slice().reverse().map(p=>`<tr><td>${esc(p.year)}</td><td>${esc(p.topic)}</td><td>${p.count}</td><td>${esc(p.difficulty)}</td><td>${esc(p.kind)}</td><td><button class="tiny-btn" data-pyqdel="${p._id}">Delete</button></td></tr>`).join("")||'<tr><td colspan="6">No records saved.</td></tr>';document.querySelectorAll("[data-pyqdel]").forEach(x=>x.onclick=()=>del("pyqs",x.dataset.pyqdel))}
 function renderMocks(){let scores=state.mocks.map(m=>Number(m.score));$("bestScore").textContent=scores.length?Math.max(...scores).toFixed(2):"—";$("avgScore").textContent=scores.length?(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(2):"—";let accuracy=state.mocks.length?state.mocks.reduce((a,m)=>a+Number(m.correct)/Math.max(1,Number(m.correct)+Number(m.wrong)),0)/state.mocks.length*100:0;$("avgAccuracy").textContent=state.mocks.length?accuracy.toFixed(1)+"%":"—";$("mockHistory").innerHTML=state.mocks.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(m=>`<div class="mock-history"><span><b>${esc(m.name)}</b><br><small>${fmtDate(m.date)} · ${m.time} min</small></span><b>${Number(m.score).toFixed(2)} / 200</b><button class="tiny-btn" data-mockdel="${m._id}">×</button></div>`).join("")||'<div class="empty">No mock tests recorded yet.</div>';document.querySelectorAll("[data-mockdel]").forEach(x=>x.onclick=()=>del("mocks",x.dataset.mockdel))}
 function renderAnalytics(){let mins=state.logs.reduce((a,x)=>a+Number(x.minutes),0);$("aSessions").textContent=state.logs.length;$("aAverage").textContent=state.logs.length?Math.round(mins/state.logs.length)+"m":"0m";$("aPyqs").textContent=state.pyqs.reduce((a,x)=>a+Number(x.count),0);$("aTasks").textContent=state.tasks.length?Math.round(state.tasks.filter(t=>t.completed).length/state.tasks.length*100)+"%":"0%";
@@ -132,7 +387,7 @@ let sums={};state.logs.forEach(l=>sums[l.subject]=(sums[l.subject]||0)+Number(l.
 $("analyticsSections").innerHTML=Object.entries(groupTopics()).map(([s,a])=>{let n=a.filter(done).length;return `<div class="section-row"><b>${esc(s)}</b><span>${Math.round(n/a.length*100)}%</span></div><div class="bar" style="margin:5px 0 12px"><i style="width:${n/a.length*100}%"></i></div>`}).join("");
 let days=Array.from({length:7},(_,i)=>{let d=new Date();d.setDate(d.getDate()-(6-i));let key=d.toISOString().slice(0,10);return {key,label:d.toLocaleDateString("en-IN",{weekday:"short"}),mins:state.logs.filter(l=>l.date===key).reduce((a,l)=>a+Number(l.minutes),0)}}),peak=Math.max(1,...days.map(d=>d.mins));$("weeklyChart").innerHTML=days.map(d=>`<div class="week-col"><b>${d.mins?d.mins+"m":"—"}</b><div class="week-bar-wrap"><div class="week-bar" style="height:${Math.max(3,d.mins/peak*100)}%"></div></div><small>${d.label}</small></div>`).join("")}
 function renderLogs(){$("logRows").innerHTML=state.logs.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(l=>`<div class="task-item"><div class="task-copy"><b>${esc(l.topic||l.subject)}</b><small>${fmtDate(l.date)} · ${esc(l.subject)} · ${l.minutes} min ${l.note?"· "+esc(l.note):""}</small></div><button class="tiny-btn" data-logdel="${l._id}">Delete</button></div>`).join("")||'<div class="empty">No study sessions logged yet.</div>';document.querySelectorAll("[data-logdel]").forEach(x=>x.onclick=()=>del("logs",x.dataset.logdel))}
-function render(){renderDashboard();renderPlanner();renderSyllabus();renderRevisions();renderPyqs();renderMocks();renderAnalytics();renderLogs()}
+function render(){renderDashboard();renderPlanner();renderSyllabus();renderRevisions();renderPyqs();renderMocks();renderAnalytics();renderLogs();renderDailySchedule()}
 function formObj(f){return Object.fromEntries(new FormData(f))}
 $("nav").addEventListener("click",e=>{let b=e.target.closest("[data-tab]");if(b)nav(b.dataset.tab)});document.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>nav(b.dataset.goto));
 $("todayLabel").textContent=new Date().toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short",year:"numeric"});
@@ -151,7 +406,8 @@ $("refreshBtn").onclick=async()=>{try{await load();toast("Synced with MongoDB")}
 $("themeBtn").onclick=()=>document.body.classList.toggle("dark");
 $("exportJson").onclick=()=>{let blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),data:state},null,2)],{type:"application/json"});download(blob,"oavs-study-hub-backup-"+today()+".json")};
 function download(blob,name){let a=document.createElement("a"),u=URL.createObjectURL(blob);a.href=u;a.download=name;a.click();URL.revokeObjectURL(u)}
-$("exportCsv").onclick=()=>{let files={topics:state.topics,study_logs:state.logs,revisions:state.revisions,pyqs:state.pyqs,mocks:state.mocks,tasks:state.tasks};Object.entries(files).forEach(([name,rows])=>{if(!rows.length)return;let keys=[...new Set(rows.flatMap(Object.keys))],csv=[keys.join(","),...rows.map(r=>keys.map(k=>'"'+String(r[k]??"").replace(/"/g,'""')+'"').join(","))].join("\\n");download(new Blob([csv],{type:"text/csv"}),name+".csv")})};
+$("exportCsv").onclick=()=>{let files={topics:state.topics,study_logs:state.logs,revisions:state.revisions,pyqs:state.pyqs,mocks:state.mocks,tasks:state.tasks,daily_schedules:state.schedules};Object.entries(files).forEach(([name,rows])=>{if(!rows.length)return;let keys=[...new Set(rows.flatMap(Object.keys))],csv=[keys.join(","),...rows.map(r=>keys.map(k=>'"'+String(r[k]??"").replace(/"/g,'""')+'"').join(","))].join("\\n");download(new Blob([csv],{type:"text/csv"}),name+".csv")})};
 $("importJson").onchange=async e=>{let file=e.target.files[0];if(!file)return;try{let j=JSON.parse(await file.text());restoreData=j.data||j;if(!restoreData.topics||!restoreData.logs)throw Error("This does not look like an OAVS Study Hub backup");$("restoreName").textContent=file.name+" selected";$("restoreBtn").disabled=false}catch(err){restoreData=null;$("restoreName").textContent=err.message;$("restoreBtn").disabled=true}};
-$("restoreBtn").onclick=async()=>{if(!restoreData||!confirm("This replaces the current MongoDB study records. Continue?"))return;try{state={topics:[],logs:[],revisions:[],pyqs:[],mocks:[],tasks:[],...restoreData};await saveAll();toast("Backup restored")}catch(e){toast(e.message)}};
+$("restoreBtn").onclick=async()=>{if(!restoreData||!confirm("This replaces the current MongoDB study records. Continue?"))return;try{state={topics:[],logs:[],revisions:[],pyqs:[],mocks:[],tasks:[],schedules:[],...restoreData};await saveAll();toast("Backup restored")}catch(e){toast(e.message)}};
+initScheduleControls();
 (async()=>{try{await load()}catch(e){$("connectionText").textContent="Offline";$("cloudStatus").textContent="Backend connection failed";$("cloudDetail").textContent=e.message;toast("Could not connect: "+e.message)}})();

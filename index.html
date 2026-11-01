@@ -23,6 +23,92 @@
 <article class="metric"><div class="metric-top"><span>STUDY HOURS</span><i>◷</i></div><strong id="mHours">0.0h</strong><small>All recorded sessions</small></article>
 <article class="metric"><div class="metric-top"><span>TASKS TO DO</span><i>☷</i></div><strong id="mTasks">0</strong><small id="mTaskCaption">No pending tasks today</small></article>
 <article class="metric"><div class="metric-top"><span>MOCK BEST SCORE</span><i>♧</i></div><strong id="mBest">—</strong><small id="mMockCaption">No mock recorded yet</small></article></div>
+
+<!-- Dedicated Daily Study Schedule Section -->
+<article class="panel space-top" id="dailyScheduleSection">
+  <div class="panel-head wrap syl-top-header">
+    <div>
+      <div class="kicker">FOCUSED PREPARATION ROUTINE</div>
+      <h3>Daily Study Schedule</h3>
+      <p id="schedSubtitle">Morning (2.5h) & Night (1–1.5h) structured daily prep blocks</p>
+    </div>
+    <div class="sched-top-controls">
+      <div class="sched-date-group">
+        <label for="schedDate" class="sched-date-label">Schedule Date:</label>
+        <input type="date" id="schedDate" class="sched-date-input">
+      </div>
+      <button type="button" class="btn btn-outline sched-btn-sm" id="schedTodayBtn">Today</button>
+      <button type="button" class="btn btn-outline sched-btn-sm" id="schedResetDayBtn" title="Reset this day to default template without losing other dates">↺ Reset day</button>
+      <button type="button" class="btn btn-primary sched-btn-sm" id="schedAddSlotBtn">＋ Add task</button>
+    </div>
+  </div>
+
+  <div class="sched-summary-bar">
+    <div class="sched-stat-item">
+      <span>DAILY TARGET</span>
+      <strong id="schedTotalTime">240m (4.0h)</strong>
+    </div>
+    <div class="sched-stat-item">
+      <span>COMPLETED TIME</span>
+      <strong id="schedDoneTime" class="text-success">0m (0.0h)</strong>
+    </div>
+    <div class="sched-stat-item">
+      <span>REMAINING TIME</span>
+      <strong id="schedRemainingTime">240m (4.0h)</strong>
+    </div>
+    <div class="sched-stat-item sched-stat-progress">
+      <div class="sched-progress-top">
+        <span>DAILY COMPLETION</span>
+        <strong id="schedCompletionPct">0%</strong>
+      </div>
+      <div class="mini-track"><i id="schedProgressBar" style="width: 0%"></i></div>
+    </div>
+  </div>
+
+  <div class="sched-grid">
+    <div class="sched-card morning-card">
+      <div class="sched-card-header">
+        <div class="sched-card-title-group">
+          <span class="sched-badge-icon">🌅</span>
+          <div>
+            <h4>Morning Schedule</h4>
+            <span class="sched-badge-tag">2.5 Hours · 150 Minutes</span>
+          </div>
+        </div>
+        <div class="sched-card-meta">
+          <span class="sched-card-pct" id="morningPct">0%</span>
+          <small id="morningSummary">0 / 150m done · 150m left</small>
+        </div>
+      </div>
+      <div class="sched-card-track"><i id="morningBar" style="width: 0%"></i></div>
+      <div class="sched-list" id="morningList"></div>
+      <div class="sched-card-footer">
+        <button type="button" class="text-btn sched-add-quick" data-add-shift="Morning">＋ Add morning task</button>
+      </div>
+    </div>
+
+    <div class="sched-card night-card">
+      <div class="sched-card-header">
+        <div class="sched-card-title-group">
+          <span class="sched-badge-icon">🌙</span>
+          <div>
+            <h4>Night Schedule</h4>
+            <span class="sched-badge-tag">1 to 1.5 Hours · 60–90 Minutes</span>
+          </div>
+        </div>
+        <div class="sched-card-meta">
+          <span class="sched-card-pct" id="nightPct">0%</span>
+          <small id="nightSummary">0 / 90m done · 90m left</small>
+        </div>
+      </div>
+      <div class="sched-card-track"><i id="nightBar" style="width: 0%"></i></div>
+      <div class="sched-list" id="nightList"></div>
+      <div class="sched-card-footer">
+        <button type="button" class="text-btn sched-add-quick" data-add-shift="Night">＋ Add night task</button>
+      </div>
+    </div>
+  </div>
+</article>
 <div class="content-grid"><article class="panel"><div class="panel-head"><div><h3>Technical syllabus</h3><p>Progress across all six sections</p></div><button class="text-btn" data-goto="syllabus">View tracker →</button></div><div id="dashSections" class="section-bars"></div></article>
 <article class="panel"><div class="panel-head"><div><h3>Today's focus</h3><p>Your planned tasks for today</p></div><button class="text-btn" data-goto="planner">Open planner →</button></div><div id="todayTasks" class="task-list"></div></article></div>
 <div class="content-grid lower-grid"><article class="panel"><div class="panel-head"><div><h3>Upcoming revisions</h3><p>Keep important topics fresh</p></div><button class="text-btn" data-goto="revision">All revisions →</button></div><div id="dashRevisions"></div></article><article class="panel"><div class="panel-head"><div><h3>Recent activity</h3><p>Your latest study sessions</p></div><button class="text-btn" data-goto="logs">Study journal →</button></div><div id="recentLogs"></div></article></div>
@@ -55,4 +141,5 @@
 <section class="tab" id="backup"><div class="content-grid"><article class="panel"><div class="panel-head"><div><h3>Protect your progress</h3><p>Download a complete copy of your records</p></div></div><div class="backup-block"><div class="backup-icon">⇩</div><div><b>Full JSON backup</b><p>Includes syllabus, tasks, revisions, PYQ analysis, mock tests and study logs.</p></div><button class="btn btn-primary" id="exportJson">Download backup</button></div><div class="backup-block"><div class="backup-icon">▤</div><div><b>CSV exports</b><p>Open your study records in Excel or Google Sheets.</p></div><button class="btn btn-outline" id="exportCsv">Export CSV files</button></div></article><article class="panel"><div class="panel-head"><div><h3>Restore a backup</h3><p>Restore a previously exported JSON file</p></div></div><div class="warning">Restoring replaces the current saved records. Download a backup first.</div><label class="file-drop">Choose JSON backup<input type="file" id="importJson" accept=".json,application/json"></label><button class="btn btn-danger" id="restoreBtn" disabled>Restore selected backup</button><p class="helper" id="restoreName">No file selected.</p></article></div><article class="panel space-top"><div class="panel-head"><div><h3>Cloud data status</h3><p>MongoDB Atlas is the source of truth</p></div></div><div class="cloud-status"><span class="pulse"></span><div><b id="cloudStatus">Waiting for connection</b><small id="cloudDetail">Connect the backend to load your records.</small></div></div></article></section>
 <footer class="footer">OAVS Study Hub Pro <span>·</span> Your study records sync through your private MongoDB backend.</footer></main></div>
 <div class="toast" id="toast"></div><dialog id="taskDialog"><form id="quickTaskForm" class="dialog-card"><div class="panel-head"><div><h3>Quick add task</h3><p>Add a study task without leaving the dashboard</p></div><button type="button" class="icon-btn" id="closeDialog">×</button></div><label>Task title<input name="title" required placeholder="What will you study?"></label><label>Date<input name="date" type="date" required></label><label>Subject<select name="subject"><option>Computer Science</option><option>Reasoning</option><option>Current Affairs</option><option>English</option><option>Odia</option><option>Mock Test</option></select></label><label>Duration (minutes)<input name="duration" type="number" min="1" value="45"></label><button class="btn btn-primary">Add task</button></form></dialog>
+<dialog id="schedDialog"><form id="schedTaskForm" class="dialog-card"><div class="panel-head"><div><h3 id="schedDialogTitle">Schedule task</h3><p>Configure task name and planned duration</p></div><button type="button" class="icon-btn" id="closeSchedDialog">×</button></div><input type="hidden" name="id"><label>Schedule block<select name="shift"><option value="Morning">🌅 Morning Schedule</option><option value="Night">🌙 Night Schedule</option></select></label><label>Task title<input name="title" required placeholder="e.g. Computer Science"></label><label>Duration (minutes)<input name="duration" type="number" min="1" max="1440" required value="30"></label><button class="btn btn-primary">Save schedule task</button></form></dialog>
 <script src="config.js"></script><script src="app.js"></script></body></html>
